@@ -55,39 +55,6 @@ class Board(object):
         self.allowed_moves = list(range(pow(3, 3)))
         self.players = (self.PLAYER_1, self.PLAYER_2)
 
-    def find(self, arr, key):
-        """Find a given key in a 3D array.
-
-        Args:
-            arr (List[List[List[int]]]]): 3D array to search.
-            key (int): Key to find.
-
-        Returns:
-            Tuple of the Board, Row, and Column of the key.
-        """
-        cnt = 0
-        for i in range(3):
-            for x in range(3):
-                for y in range(3):
-                    if cnt == key:
-                        return (i, x, y)
-                    cnt += 1
-
-    def find_combo(self, combo):
-        """Given a combination find the coordinates of each part.
-
-        Args:
-            combo (List[int]): Winning combination to search for.
-
-        Returns:
-            List of the coordinates of the starting, middle, and ending.
-        """
-        s, m, e = combo
-        s = self.find(self.board, s)
-        m = self.find(self.board, m)
-        e = self.find(self.board, e)
-        return s, m, e
-
     @staticmethod
     def create_board():
         """Create the board with appropriate positions and the like
@@ -95,18 +62,7 @@ class Board(object):
         Returns:
             3D array with ints for each position.
         """
-        cnt = 0
-        board = []
-        for i in range(3):
-            bt = []
-            for x in range(3):
-                rt = []
-                for y in range(3):
-                    rt.append(cnt)
-                    cnt += 1
-                bt.append(rt)
-            board.append(bt)
-        return board
+        return list(range(27))
 
     def get_moves(self, player):
         """Get the previously made moves for the player.
@@ -118,13 +74,9 @@ class Board(object):
             List of the available moves of a player.
         """
         moves = []
-        cnt = 0
-        for i in range(3):
-            for x in range(3):
-                for y in range(3):
-                    if self.board[i][x][y] == player:
-                        moves += [cnt]
-                    cnt += 1
+        for i in range(27):
+            if self.board[i] == player:
+                moves.append(i)
         return moves
 
     def available_combos(self, player):
@@ -188,8 +140,7 @@ class Board(object):
         Returns:
             The value at the given location on the board.
         """
-        b, r, c = self.find(self.board, key)
-        return self.board[b][r][c]
+        return self.board[key]
 
     def check_available(self, player, enemy):
         """int: Check the number of available wins on the current board
@@ -202,10 +153,9 @@ class Board(object):
 
     def undo_move(self, position):
         """Reverses a move."""
-        self.allowed_moves += [position]
+        self.allowed_moves.append(position)
         self.allowed_moves.sort()
-        i, x, y = self.find(self.board, position)
-        self.board[i][x][y] = position
+        self.board[position] = position
 
     def move(self, position, player):
         """Initiates a move on the given position.
@@ -216,8 +166,7 @@ class Board(object):
         """
         self.allowed_moves.remove(position)
         self.allowed_moves.sort()
-        i, x, y = self.find(self.board, position)
-        self.board[i][x][y] = player
+        self.board[position] = player
 
     def display(self):
         """Displays the game's current state in text form.
@@ -227,20 +176,21 @@ class Board(object):
         made a move on that location.
         """
         cnt = 0
-        for i, bd in enumerate(self.board):
+        for i in range(3):
             print('{}{}Board #{}{}'.format(Back.WHITE, Fore.BLACK, i + 1, Style.RESET_ALL))
-            for line in bd:
+            for row in range(3):
                 larr = []
-                for cell in line:
+                for col in range(3):
+                    cell_position = i*9 + row*3 + col
+                    cell = self.board[cell_position]
                     bg = Back.RED
-                    if self.winner and cnt in self.winning_combo:
+                    if self.winner and (cell_position in self.winning_combo):
                         bg = Back.BLUE
                     if cell in self.players:
                         s = '{}{:>2}{}'.format(bg, cell * 2, Style.RESET_ALL)
                     else:
                         s = '{:>2}'.format(cell)
-                    larr += [s]
-                    cnt += 1
+                    larr.append(s)
                 print(' '.join(larr))
 
 class AIPlayer(object):
