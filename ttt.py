@@ -6,6 +6,12 @@ alternative exists.
 
 
 from colorama import Back, Style, Fore
+import random
+
+DEFEND = 1001
+LOSE = -1000
+WIN = 1000
+TIE = 0
 
 
 class Board(object):
@@ -52,7 +58,8 @@ class Board(object):
 
     def __init__(self):
         self.board = Board.create_board()
-        self.allowed_moves = list(range(pow(3, 3)))
+        self.allowed_moves = list(range(9))
+        self.moves = 0
         self.players = (self.PLAYER_1, self.PLAYER_2)
 
     @staticmethod
@@ -93,6 +100,8 @@ class Board(object):
     @property
     def complete(self):
         """bool: Whether or not the game is finished or tied."""
+        # if self.moves == 0:
+        #     return False
         for player in self.players:
             for combo in self.winning_combos:
                 combo_avail = True
@@ -154,6 +163,9 @@ class Board(object):
     def undo_move(self, position):
         """Reverses a move."""
         self.allowed_moves.append(position)
+        if position < 18:
+            self.allowed_moves.remove(position + 9)
+        self.moves -= 1
         self.allowed_moves.sort()
         self.board[position] = position
 
@@ -165,6 +177,9 @@ class Board(object):
             player (str): Player to set piece to.
         """
         self.allowed_moves.remove(position)
+        if position < 18:
+            self.allowed_moves.append(position + 9)
+        self.moves += 1
         self.allowed_moves.sort()
         self.board[position] = player
 
@@ -199,38 +214,45 @@ class AIPlayer(object):
         self.piece = piece
         self.difficulty = ply
         self.depth_count = 0
+        self.nodes_examined = 0
 
     def do_turn(self):
-        best_score = -1000
+        best_score = 2*LOSE
         best_move = None
-        h = None
-        win = False
 
         for move in self.board.allowed_moves:
             self.board.move(move, self.piece)
             if self.board.complete:
-                win = True
-                break
+                return
             else:
-                h = self.think_ahead(self.enemy, -1000, 1000)
+                # see if it blocks the other player
+                self.board.undo_move(move)
+                self.board.move(move, self.enemy)
+                if self.board.complete and self.board.winner == self.enemy:
+                    self.board.undo_move(move)
+                    self.board.move(move, self.piece)
+                    return
+
+                # If not winning or blocking, then recurse
+                self.board.undo_move(move)
+                self.board.move(move, self.piece)
+                h = self.think_ahead(self.enemy, LOSE, WIN)
+                print()
+                print(move)
+                print(self.nodes_examined)
+                print(h)
                 self.depth_count = 0
+                self.nodes_examined = 0
                 if h >= best_score:
                     best_score = h
                     best_move = move
-                    self.board.undo_move(move)
-                else:
-                    self.board.undo_move(move)
-                
-                # see if it blocks the other player
-                self.board.move(move, self.enemy)
-                if self.board.complete and self.board.winner == self.enemy:
-                    if 1001 >= best_score:
-                        best_score = 1001
-                        best_move = move
                 self.board.undo_move(move)
 
-        if not win:
-            self.board.move(best_move, self.piece)
+                # Short circuit on a win
+                if best_score == WIN:
+                    break
+
+        self.board.move(best_move, self.piece)
 
     def think_ahead(self, player, a, b):
         """Recursive Minimax & Alpha-Beta method to find the advisable moves.
@@ -242,17 +264,24 @@ class AIPlayer(object):
         Returns:
             Alpha or Beta value depending on values of nodes.
         """
+        self.nodes_examined += 1
         if self.depth_count >= self.difficulty:
             return self.simple_heuristic
         else:
             self.depth_count += 1
             if player == self.piece:
-                h = -1000
+                h = LOSE
                 for move in self.board.allowed_moves:
                     self.board.move(move, player)
                     if self.board.complete:
-                        self.board.undo_move(move)
-                        return 1000
+                        if self.board.winner == player:
+                            self.board.undo_move(move)
+                            self.depth_count -= 1
+                            return WIN
+                        else:
+                            self.board.undo_move(move)
+                            self.depth_count -= 1
+                            return TIE
                     else:
                         h = self.think_ahead(self.enemy, a, b)
                         if h > a:
@@ -262,14 +291,21 @@ class AIPlayer(object):
                             self.board.undo_move(move)
                     if a >= b:
                         break
+                self.depth_count -= 1
                 return a
             else:
-                h = 1000
+                h = WIN
                 for move in self.board.allowed_moves:
                     self.board.move(move, player)
                     if self.board.complete:
-                        self.board.undo_move(move)
-                        return -1000
+                        if self.board.winner == player:
+                            self.board.undo_move(move)
+                            self.depth_count -= 1
+                            return LOSE + self.simple_heuristic
+                        else:
+                            self.board.undo_move(move)
+                            self.depth_count -= 1
+                            return TIE
                     else:
                         h = self.think_ahead(self.piece, a, b)
                         if h < b:
@@ -279,14 +315,11 @@ class AIPlayer(object):
                             self.board.undo_move(move)
                     if a >= b:
                         break
+                self.depth_count -= 1
                 return b
-
 
     @property
     def simple_heuristic(self):
-        """int: Number of spaces available to win for the AI with the number
-        of spaces available for the Human to win subtracted. Higher numbers
-        are more favorable for the AI."""
         return self.board.check_available(self.piece, self.enemy) - self.board.check_available(self.enemy, self.piece)
 
     @property
@@ -314,6 +347,14 @@ class HumanPlayer(object):
             self.board.move(position, self.piece)
             break
 
+class RandomPlayer(object):
+    def __init__(self, board, piece):
+        self.board = board
+        self.piece = piece
+
+    def do_turn(self):
+        self.board.move(random.choice(self.board.allowed_moves), self.piece)
+
 if __name__ == '__main__':
     from argparse import ArgumentParser
     parser = ArgumentParser(description=__doc__)
@@ -335,27 +376,34 @@ if __name__ == '__main__':
 
     if args.p1 == "h":
         player1 = HumanPlayer(board, board.PLAYER_1)
-    else:
+    elif args.p1 == "ai":
         player1 = AIPlayer(board, board.PLAYER_1, ply=args.p1_ply)
+    else:
+        player1 = RandomPlayer(board, board.PLAYER_1)
 
     if args.p2 == "h":
         player2 = HumanPlayer(board, board.PLAYER_2)
-    else:
+    elif args.p2 == "ai":
         player2 = AIPlayer(board, board.PLAYER_2, ply=args.p2_ply)
+    else:
+        player2 = RandomPlayer(board, board.PLAYER_2)
 
     player1_turn = True
     try:
         while not board.complete:
             board.display()
             if player1_turn:
+                print("{}Player X{}".format(Style.BRIGHT, Style.RESET_ALL))
                 player1.do_turn()
             else:
+                print("{}Player O{}".format(Style.BRIGHT, Style.RESET_ALL))
                 player2.do_turn()
             # Switch turn
             player1_turn = not player1_turn
 
-        print('{}{} won!'.format(Style.BRIGHT, board.winner))
+        print('{}{} won!{}'.format(Style.BRIGHT, board.winner, Style.RESET_ALL))
         board.display()
+        print('Moves: ' + str(board.moves))
     except KeyboardInterrupt:
         print('\nWhat? Giving up already?')
 
